@@ -126,6 +126,12 @@ class FFmpegService {
     const args = ['-i', inputName];
     const { settings, metadata } = video;
 
+    // Multi-threading configuration
+    // Use hardware concurrency, but cap at 16 to avoid excessive memory usage in browser
+    // Default to 4 if API is unavailable
+    const threads = Math.min(16, navigator.hardwareConcurrency || 4);
+    args.push('-threads', threads.toString());
+
     // Resolution
     if (settings.resolutionScale !== 1 && metadata) {
       // Ensure dimensions are divisible by 2 for mp4/h264
@@ -162,7 +168,9 @@ class FFmpegService {
         // CRF Mode
         args.push('-c:v', 'libx264');
         args.push('-crf', settings.crf.toString());
-        args.push('-preset', 'fast'); // Balance speed/size
+        // 'faster' preset is a good balance for WASM. 'fast' is default.
+        // Using 'veryfast' can significantly speed up with minimal quality loss for web previews.
+        args.push('-preset', 'veryfast'); 
     }
 
     // Audio - AAC for compatibility
