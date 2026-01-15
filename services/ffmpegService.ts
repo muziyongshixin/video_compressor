@@ -1,6 +1,6 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL, fetchFile } from '@ffmpeg/util';
-import { VideoFile, CompressionSettings } from '../types';
+import { VideoFile, CompressionSettings, VideoMetadata } from '../types';
 
 class FFmpegService {
   private ffmpeg: FFmpeg | null = null;
@@ -63,7 +63,7 @@ class FFmpegService {
     }
   }
 
-  public async getMetadata(file: File): Promise<{ duration: number; width: number; height: number; bitrate: number; fps: number }> {
+  public async getMetadata(file: File): Promise<VideoMetadata> {
     if (!this.ffmpeg || !this.loaded) throw new Error("FFmpeg not loaded");
 
     const fileName = 'probe_input_' + Date.now();
@@ -89,6 +89,9 @@ class FFmpegService {
     await this.ffmpeg.deleteFile(fileName);
 
     // Parse output
+    const formatMatch = output.match(/Input #0, ([^,]+)/);
+    const format = formatMatch ? formatMatch[1] : 'unknown';
+
     const durationMatch = output.match(/Duration: (\d{2}):(\d{2}):(\d{2}\.\d{2})/);
     let duration = 0;
     if (durationMatch) {
@@ -108,7 +111,7 @@ class FFmpegService {
     const fpsMatch = output.match(/(\d+(?:\.\d+)?) fps/);
     const fps = fpsMatch ? parseFloat(fpsMatch[1]) : 30;
 
-    return { duration, width, height, bitrate, fps };
+    return { duration, width, height, bitrate, fps, format };
   }
 
   public async compressVideo(video: VideoFile): Promise<Blob> {
