@@ -174,7 +174,9 @@ class FFmpegService {
 
     // Read result
     const data = await this.ffmpeg.readFile(outputName);
-    const blob = new Blob([data], { type: `video/${settings.format}` });
+    
+    // Cast to any to avoid TS error about SharedArrayBuffer vs ArrayBuffer in Blob constructor
+    const blob = new Blob([data as any], { type: `video/${settings.format}` });
 
     // Cleanup
     await this.ffmpeg.deleteFile(inputName);
