@@ -1,3 +1,4 @@
+
 export enum VideoStatus {
   IDLE = 'IDLE',
   QUEUED = 'QUEUED',
@@ -15,6 +16,8 @@ export interface VideoMetadata {
   fps: number;
 }
 
+export type CompressionPreset = 'speed' | 'balanced' | 'quality';
+
 export interface CompressionSettings {
   resolutionScale: number; // 1, 0.75, 0.5 etc.
   fps: number | null; // null means keep original
@@ -22,6 +25,7 @@ export interface CompressionSettings {
   targetSizeMB?: number; // For one-click mode
   mode: 'manual' | 'target_size';
   format: 'mp4' | 'webm';
+  compressionPreset: CompressionPreset;
 }
 
 export interface VideoFile {
@@ -38,6 +42,7 @@ export interface VideoFile {
   settings: CompressionSettings;
   startTime?: number;
   endTime?: number;
+  remainingTime?: number; // Seconds
 }
 
 export interface LogMessage {

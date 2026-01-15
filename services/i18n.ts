@@ -22,7 +22,9 @@ export const translations = {
       empty: "Queue is empty"
     },
     videoList: {
-      download: "Download"
+      download: "Download",
+      cancel: "Cancel",
+      remaining: "Rem: "
     },
     controls: {
       title: "Compression Parameters",
@@ -39,7 +41,18 @@ export const translations = {
       original: "Original",
       targetSize: "Target File Size (MB)",
       note: "Note: The engine will calculate the optimal bitrate to match this size.",
-      warning: "Warning: Target size is very low for this duration. Quality may suffer significantly."
+      warning: "Warning: Target size is very low for this duration. Quality may suffer significantly.",
+      preset: "Performance Mode",
+      presets: {
+        speed: "Speed Priority",
+        balanced: "Balanced",
+        quality: "Quality Priority"
+      },
+      presetDesc: {
+        speed: "Ultrafast. Lowest CPU usage, larger file size.",
+        balanced: "Recommended. Good balance of speed and size.",
+        quality: "Very Slow. Maximum compression efficiency."
+      }
     },
     actions: {
       batchComplete: "Batch Complete!",
@@ -49,7 +62,8 @@ export const translations = {
       start: "Start Batch Compression",
       sourcePreview: "SOURCE PREVIEW",
       selectVideo: "Select a video from the queue to configure settings",
-      initializing: "Initializing Neural Core..."
+      initializing: "Initializing Neural Core...",
+      reloading: "Reloading Engine..."
     },
     status: {
       error: "Engine Failed",
@@ -57,7 +71,8 @@ export const translations = {
       details: "Technical Details: This app requires 'SharedArrayBuffer' support.",
       loadingFailed: "Failed to load compression engine.",
       compressionFailed: "Compression Failed",
-      metadataError: "Could not read metadata"
+      metadataError: "Could not read metadata",
+      cancelled: "Cancelled"
     }
   },
   zh: {
@@ -80,7 +95,9 @@ export const translations = {
       empty: "队列为空"
     },
     videoList: {
-      download: "下载"
+      download: "下载",
+      cancel: "取消任务",
+      remaining: "剩余: "
     },
     controls: {
       title: "压缩参数",
@@ -97,7 +114,18 @@ export const translations = {
       original: "原始 (100%)",
       targetSize: "目标文件大小 (MB)",
       note: "注意：引擎将自动计算最佳码率以匹配此大小。",
-      warning: "警告：对于此时长，目标大小过小，画质可能严重受损。"
+      warning: "警告：对于此时长，目标大小过小，画质可能严重受损。",
+      preset: "性能模式",
+      presets: {
+        speed: "速度优先 (极速)",
+        balanced: "平衡模式 (推荐)",
+        quality: "质量优先 (极慢)"
+      },
+      presetDesc: {
+        speed: "Ultrafast 预设。最快速度，但文件稍大。",
+        balanced: "Veryfast 预设。速度与压缩率的最佳平衡。",
+        quality: "Medium 预设。最大限度压缩体积，耗时极长。"
+      }
     },
     actions: {
       batchComplete: "批量处理完成！",
@@ -107,7 +135,8 @@ export const translations = {
       start: "开始批量压缩",
       sourcePreview: "源文件预览",
       selectVideo: "从队列中选择一个视频以配置参数",
-      initializing: "核心正在初始化..."
+      initializing: "核心正在初始化...",
+      reloading: "正在重置引擎..."
     },
     status: {
       error: "引擎加载失败",
@@ -115,7 +144,8 @@ export const translations = {
       details: "技术细节：此应用需要浏览器支持 'SharedArrayBuffer'。",
       loadingFailed: "加载压缩引擎失败，请检查网络或浏览器版本。",
       compressionFailed: "压缩失败",
-      metadataError: "无法读取视频信息"
+      metadataError: "无法读取视频信息",
+      cancelled: "已取消"
     }
   }
 };

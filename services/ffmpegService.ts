@@ -23,12 +23,12 @@ class FFmpegService {
   public async load() {
     if (this.loaded && this.ffmpeg) return;
 
+    // Create new instance if null (e.g. after termination)
     if (!this.ffmpeg) this.ffmpeg = new FFmpeg();
 
     const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
     
-    // Explicitly construct the worker using unpkg sources to avoid CORS/COEP issues with esm.sh in restricted environments.
-    // We use a specific version known to be stable with this core version.
+    // Explicitly construct the worker using unpkg sources
     const workerScript = `
       import { FFmpeg } from "https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js";
       import { expose } from "https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js";
@@ -60,6 +60,14 @@ class FFmpegService {
     } catch (error) {
         console.error("FFmpeg load failed:", error);
         throw error;
+    }
+  }
+
+  public terminate() {
+    if (this.ffmpeg) {
+        this.ffmpeg.terminate();
+        this.ffmpeg = null;
+        this.loaded = false;
     }
   }
 
@@ -127,20 +135,18 @@ class FFmpegService {
     const { settings, metadata } = video;
 
     // 1. Multi-threading optimization
-    // Utilize hardware concurrency (capped at 16 to respect browser memory limits)
     const threads = Math.min(16, navigator.hardwareConcurrency || 4);
     args.push('-threads', threads.toString());
 
     // Resolution
     if (settings.resolutionScale !== 1 && metadata) {
-      // Ensure dimensions are divisible by 2 for mp4/h264
       const w = Math.floor((metadata.width * settings.resolutionScale) / 2) * 2;
       const h = Math.floor((metadata.height * settings.resolutionScale) / 2) * 2;
       
-      // 2. Faster Scaling Algorithm
-      // Use 'bilinear' which is faster than default 'bicubic' for downscaling
+      // Use simpler scaling for speed if not in quality mode
+      const scaleAlgo = settings.compressionPreset === 'quality' ? 'bicubic' : 'bilinear';
       args.push('-vf', `scale=${w}:${h}`);
-      args.push('-sws_flags', 'bilinear');
+      args.push('-sws_flags', scaleAlgo);
     }
 
     // FPS
@@ -148,37 +154,41 @@ class FFmpegService {
       args.push('-r', settings.fps.toString());
     }
 
-    // 3. Compression Speed Optimization
-    // Use 'ultrafast' preset. This drastically reduces CPU usage at the cost of slightly larger file size per quality unit.
-    // For client-side processing, speed is usually the bottleneck, so this trade-off is worth it.
-    args.push('-preset', 'ultrafast');
+    // 3. Compression Speed Optimization (Preset)
+    let preset = 'veryfast'; // balanced default
+    if (settings.compressionPreset === 'speed') preset = 'ultrafast';
+    if (settings.compressionPreset === 'quality') preset = 'medium';
+    
+    args.push('-preset', preset);
 
     // Compression Mode
     if (settings.mode === 'target_size' && settings.targetSizeMB && metadata && metadata.duration > 0) {
-        // Calculate bitrate: (Target Size (bits) / Duration)
         const targetSizeBits = settings.targetSizeMB * 8 * 1024 * 1024;
         const totalBitrate = targetSizeBits / metadata.duration;
-        const audioBitrate = 128 * 1024; // 128k audio assumption
+        const audioBitrate = 128 * 1024; 
         
-        // Calculate available video bitrate (with 5% overhead safety margin)
         let videoBitrate = (totalBitrate - audioBitrate) * 0.95; 
-        videoBitrate = Math.max(100000, videoBitrate); // Min floor 100kbps
+        videoBitrate = Math.max(100000, videoBitrate);
         
         args.push('-b:v', Math.floor(videoBitrate).toString());
-        args.push('-maxrate', Math.floor(videoBitrate * 1.5).toString()); // Loosen maxrate slightly for ultrafast
-        args.push('-bufsize', Math.floor(videoBitrate * 2).toString());
+        // Relax buffer constraints for speed mode to avoid strict overhead
+        const bufMult = settings.compressionPreset === 'speed' ? 2 : 1.5;
+        args.push('-maxrate', Math.floor(videoBitrate * bufMult).toString());
+        args.push('-bufsize', Math.floor(videoBitrate * (bufMult * 1.5)).toString());
     } else {
         // CRF Mode
         args.push('-c:v', 'libx264');
         args.push('-crf', settings.crf.toString());
     }
 
-    // Audio - AAC for compatibility
+    // Audio - AAC 
     args.push('-c:a', 'aac');
     args.push('-b:a', '128k');
     
-    // Add tune for latency (optional, helps with buffer management in low resource envs)
-    args.push('-tune', 'zerolatency');
+    // Add tune for latency in speed mode
+    if (settings.compressionPreset === 'speed') {
+        args.push('-tune', 'zerolatency');
+    }
 
     // Output
     args.push(outputName);

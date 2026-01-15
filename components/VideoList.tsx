@@ -1,6 +1,6 @@
 import React from 'react';
 import { VideoFile, VideoStatus } from '../types';
-import { FileVideo, Trash2, CheckCircle2, AlertTriangle, Download } from 'lucide-react';
+import { FileVideo, Trash2, CheckCircle2, AlertTriangle, Download, XOctagon } from 'lucide-react';
 import { formatBytes, formatTime } from '../services/utils';
 import { clsx } from 'clsx';
 import { translations, Language } from '../services/i18n';
@@ -8,12 +8,13 @@ import { translations, Language } from '../services/i18n';
 interface Props {
   videos: VideoFile[];
   onRemove: (id: string) => void;
+  onCancel: (id: string) => void;
   onSelect: (id: string) => void;
   selectedId: string | null;
   lang: Language;
 }
 
-const VideoList: React.FC<Props> = ({ videos, onRemove, onSelect, selectedId, lang }) => {
+const VideoList: React.FC<Props> = ({ videos, onRemove, onCancel, onSelect, selectedId, lang }) => {
   if (videos.length === 0) return null;
   const t = translations[lang].videoList;
 
@@ -68,6 +69,16 @@ const VideoList: React.FC<Props> = ({ videos, onRemove, onSelect, selectedId, la
                             <span>{video.metadata.width}x{video.metadata.height}</span>
                         </>
                     )}
+                    
+                    {video.status === VideoStatus.PROCESSING && video.remainingTime !== undefined && (
+                        <>
+                            <span className="w-1 h-1 rounded-full bg-slate-700"></span>
+                            <span className="text-cyan-400 animate-pulse">
+                                {t.remaining}{formatTime(video.remainingTime)}
+                            </span>
+                        </>
+                    )}
+
                     {video.status === VideoStatus.COMPLETED && video.outputSize && (
                         <>
                              <span className="w-1 h-1 rounded-full bg-slate-700"></span>
@@ -92,13 +103,23 @@ const VideoList: React.FC<Props> = ({ videos, onRemove, onSelect, selectedId, la
                         <Download className="w-5 h-5" />
                     </a>
                 )}
-                <button 
-                    onClick={(e) => { e.stopPropagation(); onRemove(video.id); }}
-                    className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                    disabled={video.status === VideoStatus.PROCESSING}
-                >
-                    <Trash2 className="w-5 h-5" />
-                </button>
+                
+                {video.status === VideoStatus.PROCESSING ? (
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); onCancel(video.id); }}
+                        className="p-2 text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors"
+                        title={t.cancel}
+                    >
+                        <XOctagon className="w-5 h-5" />
+                    </button>
+                ) : (
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); onRemove(video.id); }}
+                        className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                    >
+                        <Trash2 className="w-5 h-5" />
+                    </button>
+                )}
             </div>
 
             {/* Progress Bar background for active items */}

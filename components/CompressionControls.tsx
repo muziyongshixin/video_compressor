@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { CompressionSettings } from '../types';
-import { Settings2, Zap, BarChart3, Weight, Wand2, Copy } from 'lucide-react';
+import { CompressionSettings, CompressionPreset } from '../types';
+import { Settings2, Zap, BarChart3, Weight, Wand2, Copy, Gauge } from 'lucide-react';
 import { clsx } from 'clsx';
 import { formatBytes } from '../services/utils';
 import { translations, Language } from '../services/i18n';
@@ -26,14 +26,25 @@ const CompressionControls: React.FC<Props> = ({ settings, originalSize, duration
         // Rough estimation logic for CRF
         const crfFactor = Math.pow(0.5, (settings.crf - 23) / 6);
         const resFactor = settings.resolutionScale * settings.resolutionScale;
-        const fpsFactor = 1; 
         
-        setEstimatedSize(originalSize * crfFactor * resFactor * fpsFactor);
+        // Preset impact factor (rough heuristic)
+        // Ultrafast makes files larger for same CRF, or we assume slightly worse compression efficiency
+        let presetFactor = 1.0;
+        if (settings.compressionPreset === 'speed') presetFactor = 1.15;
+        if (settings.compressionPreset === 'quality') presetFactor = 0.95;
+
+        setEstimatedSize(originalSize * crfFactor * resFactor * presetFactor);
     }
   }, [settings, originalSize]);
 
   const percentChange = Math.round(((estimatedSize - originalSize) / originalSize) * 100);
   const colorClass = percentChange > 0 ? 'text-red-400' : 'text-emerald-400';
+
+  const presets: { id: CompressionPreset; label: string; color: string }[] = [
+    { id: 'speed', label: t.presets.speed, color: 'bg-emerald-600' },
+    { id: 'balanced', label: t.presets.balanced, color: 'bg-blue-600' },
+    { id: 'quality', label: t.presets.quality, color: 'bg-purple-600' },
+  ];
 
   return (
     <div className="bg-slate-900/50 border border-slate-700/50 rounded-xl p-5 space-y-5">
@@ -59,6 +70,33 @@ const CompressionControls: React.FC<Props> = ({ settings, originalSize, duration
             <span className={clsx("font-mono font-bold text-sm", colorClass)}>
                 {formatBytes(estimatedSize)} ({percentChange > 0 ? '+' : ''}{percentChange}%)
             </span>
+      </div>
+
+      {/* Preset Selector */}
+      <div>
+         <label className="block text-sm text-slate-400 mb-2 flex items-center gap-2">
+             <Gauge className="w-4 h-4" /> {t.preset}
+         </label>
+         <div className="grid grid-cols-3 gap-2">
+             {presets.map(p => (
+                 <button
+                    key={p.id}
+                    onClick={() => onChange({ ...settings, compressionPreset: p.id })}
+                    disabled={disabled}
+                    className={clsx(
+                        "py-2 px-1 rounded-lg text-xs font-medium transition-all border",
+                        settings.compressionPreset === p.id 
+                            ? `${p.color} text-white border-transparent shadow-lg scale-[1.02]` 
+                            : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-600"
+                    )}
+                 >
+                     {p.label}
+                 </button>
+             ))}
+         </div>
+         <p className="text-xs text-slate-500 mt-2">
+            {t.presetDesc[settings.compressionPreset]}
+         </p>
       </div>
 
       {/* Mode Selector */}

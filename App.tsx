@@ -16,7 +16,8 @@ const DEFAULT_SETTINGS: CompressionSettings = {
   fps: null,
   crf: 23,
   mode: 'manual',
-  format: 'mp4'
+  format: 'mp4',
+  compressionPreset: 'balanced' // Default to balanced for better UX than ultrafast
 };
 
 const App: React.FC = () => {
@@ -27,13 +28,14 @@ const App: React.FC = () => {
   const [engineError, setEngineError] = useState<string | null>(null);
   const [isProcessingBatch, setIsProcessingBatch] = useState(false);
   const [isBatchComplete, setIsBatchComplete] = useState(false);
+  const [isReloading, setIsReloading] = useState(false);
 
   const t = translations[lang];
 
-  // Load FFmpeg on Mount (Background)
-  useEffect(() => {
-    const initEngine = async () => {
-      try {
+  // Function to initialize or re-initialize the engine
+  const loadEngine = useCallback(async () => {
+    try {
+        setIsReloading(true);
         await ffmpegService.load();
         
         ffmpegService.setLogCallback((msg) => {
@@ -41,24 +43,41 @@ const App: React.FC = () => {
         });
 
         ffmpegService.setProgressCallback((progress, time) => {
+            const now = Date.now();
             setVideos(prev => prev.map(v => {
                 if (v.status === VideoStatus.PROCESSING) {
-                    return { ...v, progress: Math.min(progress * 100, 99) }; // Cap at 99 until finished
+                    // Estimate Remaining Time
+                    let remainingTime = 0;
+                    if (v.startTime && progress > 0.01) {
+                        const elapsedSeconds = (now - v.startTime) / 1000;
+                        const totalEstimated = elapsedSeconds / progress;
+                        remainingTime = Math.max(0, totalEstimated - elapsedSeconds);
+                    }
+
+                    return { 
+                        ...v, 
+                        progress: Math.min(progress * 100, 99),
+                        remainingTime 
+                    }; 
                 }
                 return v;
             }));
         });
 
         setIsEngineReady(true);
+        setIsReloading(false);
+        setEngineError(null);
       } catch (e: any) {
         console.error(e);
-        // Do not set engineError string here if we want to use 't' dynamically, 
-        // but 'e.message' is important. We'll set the raw message and format in UI.
         setEngineError(e.message || "Failed to load engine");
+        setIsReloading(false);
       }
-    };
-    initEngine();
   }, []);
+
+  // Load FFmpeg on Mount
+  useEffect(() => {
+    loadEngine();
+  }, [loadEngine]);
 
   const handleFilesAdded = useCallback(async (files: File[]) => {
     const newVideos: VideoFile[] = files.map(file => ({
@@ -84,7 +103,6 @@ const App: React.FC = () => {
                 const meta = await ffmpegService.getMetadata(video.file);
                 setVideos(prev => prev.map(v => v.id === video.id ? { ...v, metadata: meta, status: VideoStatus.IDLE } : v));
             } else {
-                 // Engine not ready, mark as IDLE so user can see/edit. Metadata will be fetched later in processQueue if possible.
                  setVideos(prev => prev.map(v => v.id === video.id ? { ...v, status: VideoStatus.IDLE } : v));
             }
         } catch (e) {
@@ -112,14 +130,40 @@ const App: React.FC = () => {
     }));
   };
 
+  const activeVideoId = useRef<string | null>(null);
+
+  // Cancel running task logic
+  const handleCancelVideo = async (id: string) => {
+    const video = videos.find(v => v.id === id);
+    if (!video || video.status !== VideoStatus.PROCESSING) return;
+
+    // To really stop WASM execution, we must terminate the worker
+    ffmpegService.terminate();
+    setIsEngineReady(false);
+    activeVideoId.current = null; // Clear lock
+    setIsProcessingBatch(false); // Stop batch loop temporarily
+    
+    // Update UI state
+    setVideos(prev => prev.map(v => 
+        v.id === id ? { 
+            ...v, 
+            status: VideoStatus.IDLE, // Reset to IDLE so they can try again
+            progress: 0, 
+            remainingTime: undefined,
+            error: t.status.cancelled
+        } : v
+    ));
+
+    // Reload engine immediately for next use
+    await loadEngine();
+  };
+
   // Batch Processing Logic
   const processQueue = async () => {
     if (!isEngineReady) return;
     setIsProcessingBatch(true);
     setIsBatchComplete(false);
   };
-
-  const activeVideoId = useRef<string | null>(null);
 
   useEffect(() => {
     const processNext = async () => {
@@ -143,16 +187,13 @@ const App: React.FC = () => {
 
         activeVideoId.current = nextVideo.id;
         
-        // Ensure metadata exists before processing if possible, though compressVideo re-checks
+        // Ensure metadata exists
         if (!nextVideo.metadata) {
             try {
                 const meta = await ffmpegService.getMetadata(nextVideo.file);
-                // Update local var for immediate use, update state for UI
                 nextVideo.metadata = meta; 
                 setVideos(prev => prev.map(v => v.id === nextVideo.id ? { ...v, metadata: meta } : v));
-            } catch (e) {
-                 // proceed without meta? compressVideo will try.
-            }
+            } catch (e) {}
         }
 
         setVideos(prev => prev.map(v => v.id === nextVideo.id ? { ...v, status: VideoStatus.PROCESSING, progress: 0, startTime: Date.now() } : v));
@@ -165,6 +206,7 @@ const App: React.FC = () => {
                     ...v, 
                     status: VideoStatus.COMPLETED, 
                     progress: 100, 
+                    remainingTime: 0,
                     outputBlob, 
                     outputSize: outputBlob.size,
                     endTime: Date.now()
@@ -172,7 +214,14 @@ const App: React.FC = () => {
             ));
         } catch (error: any) {
             console.error(error);
-            setVideos(prev => prev.map(v => v.id === nextVideo.id ? { ...v, status: VideoStatus.ERROR, error: error.message || t.status.compressionFailed } : v));
+            // Check if it was manually cancelled (we reset state in handleCancel, but the promise might still reject)
+            // If the video is already IDLE, ignore this error
+            setVideos(prev => {
+                const current = prev.find(pv => pv.id === nextVideo.id);
+                if (current && current.status === VideoStatus.IDLE) return prev;
+                
+                return prev.map(v => v.id === nextVideo.id ? { ...v, status: VideoStatus.ERROR, error: error.message || t.status.compressionFailed } : v);
+            });
         } finally {
             activeVideoId.current = null;
         }
@@ -181,7 +230,7 @@ const App: React.FC = () => {
     const timer = setInterval(processNext, 500); 
     return () => clearInterval(timer);
 
-  }, [isProcessingBatch, videos, isEngineReady, t]); // Added 't' dependency so errors are localized if lang changes during process
+  }, [isProcessingBatch, videos, isEngineReady, t]); 
 
   const selectedVideo = videos.find(v => v.id === selectedId);
   const completedVideos = videos.filter(v => v.status === VideoStatus.COMPLETED);
@@ -194,7 +243,7 @@ const App: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             {/* Left Column: List & Upload */}
             <div className="lg:col-span-7 space-y-6">
-                <Dropzone onFilesAdded={handleFilesAdded} disabled={isProcessingBatch} lang={lang} />
+                <Dropzone onFilesAdded={handleFilesAdded} disabled={isProcessingBatch || isReloading} lang={lang} />
                 
                 <div className="flex items-center justify-between">
                     <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -223,6 +272,7 @@ const App: React.FC = () => {
                         <VideoList 
                             videos={videos} 
                             onRemove={handleRemoveVideo}
+                            onCancel={handleCancelVideo}
                             onSelect={setSelectedId}
                             selectedId={selectedId}
                             lang={lang}
@@ -265,7 +315,7 @@ const App: React.FC = () => {
                             duration={selectedVideo.metadata?.duration}
                             onChange={(s) => handleSettingsChange(selectedVideo.id, s)}
                             onApplyToAll={handleApplyToAll}
-                            disabled={isProcessingBatch || selectedVideo.status === VideoStatus.PROCESSING || selectedVideo.status === VideoStatus.COMPLETED}
+                            disabled={isProcessingBatch || isReloading || selectedVideo.status === VideoStatus.PROCESSING || selectedVideo.status === VideoStatus.COMPLETED}
                             lang={lang}
                         />
                     </>
@@ -307,19 +357,19 @@ const App: React.FC = () => {
 
                     <button
                         onClick={processQueue}
-                        disabled={isProcessingBatch || videos.filter(v => v.status === VideoStatus.QUEUED || v.status === VideoStatus.IDLE).length === 0 || !isEngineReady}
+                        disabled={isProcessingBatch || isReloading || videos.filter(v => v.status === VideoStatus.QUEUED || v.status === VideoStatus.IDLE).length === 0 || !isEngineReady}
                         className={clsx(
                             "w-full py-4 rounded-xl font-bold text-lg shadow-xl flex items-center justify-center gap-3 transition-all transform active:scale-95",
-                            (isProcessingBatch || !isEngineReady) 
+                            (isProcessingBatch || !isEngineReady || isReloading) 
                                 ? "bg-slate-800 text-slate-400 cursor-wait" 
                                 : videos.length === 0
                                     ? "bg-slate-800 text-slate-600 cursor-not-allowed"
                                     : "bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-cyan-900/20"
                         )}
                     >
-                        {!isEngineReady ? (
+                        {!isEngineReady || isReloading ? (
                              <>
-                                <Loader2 className="w-6 h-6 animate-spin" /> {t.actions.initializing}
+                                <Loader2 className="w-6 h-6 animate-spin" /> {isReloading ? t.actions.reloading : t.actions.initializing}
                              </>
                         ) : isProcessingBatch ? (
                             <>
