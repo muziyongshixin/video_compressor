@@ -126,9 +126,8 @@ class FFmpegService {
     const args = ['-i', inputName];
     const { settings, metadata } = video;
 
-    // Multi-threading configuration
-    // Use hardware concurrency, but cap at 16 to avoid excessive memory usage in browser
-    // Default to 4 if API is unavailable
+    // 1. Multi-threading optimization
+    // Utilize hardware concurrency (capped at 16 to respect browser memory limits)
     const threads = Math.min(16, navigator.hardwareConcurrency || 4);
     args.push('-threads', threads.toString());
 
@@ -137,13 +136,22 @@ class FFmpegService {
       // Ensure dimensions are divisible by 2 for mp4/h264
       const w = Math.floor((metadata.width * settings.resolutionScale) / 2) * 2;
       const h = Math.floor((metadata.height * settings.resolutionScale) / 2) * 2;
+      
+      // 2. Faster Scaling Algorithm
+      // Use 'bilinear' which is faster than default 'bicubic' for downscaling
       args.push('-vf', `scale=${w}:${h}`);
+      args.push('-sws_flags', 'bilinear');
     }
 
     // FPS
     if (settings.fps) {
       args.push('-r', settings.fps.toString());
     }
+
+    // 3. Compression Speed Optimization
+    // Use 'ultrafast' preset. This drastically reduces CPU usage at the cost of slightly larger file size per quality unit.
+    // For client-side processing, speed is usually the bottleneck, so this trade-off is worth it.
+    args.push('-preset', 'ultrafast');
 
     // Compression Mode
     if (settings.mode === 'target_size' && settings.targetSizeMB && metadata && metadata.duration > 0) {
@@ -152,30 +160,25 @@ class FFmpegService {
         const totalBitrate = targetSizeBits / metadata.duration;
         const audioBitrate = 128 * 1024; // 128k audio assumption
         
-        // Calculate available video bitrate
-        // Apply 5% safety margin for container overhead and variable bitrate fluctuation
+        // Calculate available video bitrate (with 5% overhead safety margin)
         let videoBitrate = (totalBitrate - audioBitrate) * 0.95; 
-        
-        // Floor at 100kbps to prevent failure on extremely small targets/long videos
-        // (The result will be larger than target, but playable)
-        videoBitrate = Math.max(100000, videoBitrate);
+        videoBitrate = Math.max(100000, videoBitrate); // Min floor 100kbps
         
         args.push('-b:v', Math.floor(videoBitrate).toString());
-        // Stricter constraints for target size
-        args.push('-maxrate', Math.floor(videoBitrate * 1.2).toString());
+        args.push('-maxrate', Math.floor(videoBitrate * 1.5).toString()); // Loosen maxrate slightly for ultrafast
         args.push('-bufsize', Math.floor(videoBitrate * 2).toString());
     } else {
         // CRF Mode
         args.push('-c:v', 'libx264');
         args.push('-crf', settings.crf.toString());
-        // 'faster' preset is a good balance for WASM. 'fast' is default.
-        // Using 'veryfast' can significantly speed up with minimal quality loss for web previews.
-        args.push('-preset', 'veryfast'); 
     }
 
     // Audio - AAC for compatibility
     args.push('-c:a', 'aac');
     args.push('-b:a', '128k');
+    
+    // Add tune for latency (optional, helps with buffer management in low resource envs)
+    args.push('-tune', 'zerolatency');
 
     // Output
     args.push(outputName);
@@ -183,15 +186,12 @@ class FFmpegService {
     // Execute
     const result = await this.ffmpeg.exec(args);
     
-    // FFmpeg.wasm exec returns 0 on success, 1 on fail
     if (result !== 0) {
         throw new Error("FFmpeg compression failed");
     }
 
     // Read result
     const data = await this.ffmpeg.readFile(outputName);
-    
-    // Cast to any to avoid TS error about SharedArrayBuffer vs ArrayBuffer in Blob constructor
     const blob = new Blob([data as any], { type: `video/${settings.format}` });
 
     // Cleanup
