@@ -144,11 +144,19 @@ class FFmpegService {
         // Calculate bitrate: (Target Size (bits) / Duration)
         const targetSizeBits = settings.targetSizeMB * 8 * 1024 * 1024;
         const totalBitrate = targetSizeBits / metadata.duration;
-        const audioBitrate = 128 * 1024; // 128k audio
-        const videoBitrate = Math.max(1000, totalBitrate - audioBitrate);
+        const audioBitrate = 128 * 1024; // 128k audio assumption
+        
+        // Calculate available video bitrate
+        // Apply 5% safety margin for container overhead and variable bitrate fluctuation
+        let videoBitrate = (totalBitrate - audioBitrate) * 0.95; 
+        
+        // Floor at 100kbps to prevent failure on extremely small targets/long videos
+        // (The result will be larger than target, but playable)
+        videoBitrate = Math.max(100000, videoBitrate);
         
         args.push('-b:v', Math.floor(videoBitrate).toString());
-        args.push('-maxrate', Math.floor(videoBitrate * 1.5).toString());
+        // Stricter constraints for target size
+        args.push('-maxrate', Math.floor(videoBitrate * 1.2).toString());
         args.push('-bufsize', Math.floor(videoBitrate * 2).toString());
     } else {
         // CRF Mode

@@ -1,18 +1,21 @@
 import React from 'react';
 import { VideoFile, VideoStatus } from '../types';
-import { FileVideo, Trash2, CheckCircle2, AlertTriangle, Download, Clock } from 'lucide-react';
+import { FileVideo, Trash2, CheckCircle2, AlertTriangle, Download } from 'lucide-react';
 import { formatBytes, formatTime } from '../services/utils';
 import { clsx } from 'clsx';
+import { translations, Language } from '../services/i18n';
 
 interface Props {
   videos: VideoFile[];
   onRemove: (id: string) => void;
   onSelect: (id: string) => void;
   selectedId: string | null;
+  lang: Language;
 }
 
-const VideoList: React.FC<Props> = ({ videos, onRemove, onSelect, selectedId }) => {
+const VideoList: React.FC<Props> = ({ videos, onRemove, onSelect, selectedId, lang }) => {
   if (videos.length === 0) return null;
+  const t = translations[lang].videoList;
 
   return (
     <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
@@ -84,7 +87,7 @@ const VideoList: React.FC<Props> = ({ videos, onRemove, onSelect, selectedId }) 
                         download={`compressed_${video.file.name}`}
                         onClick={(e) => e.stopPropagation()}
                         className="p-2 text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
-                        title="Download"
+                        title={t.download}
                     >
                         <Download className="w-5 h-5" />
                     </a>

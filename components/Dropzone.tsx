@@ -2,14 +2,17 @@
 import React, { useCallback, useState } from 'react';
 import { Upload, FileVideo, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
+import { translations, Language } from '../services/i18n';
 
 interface DropzoneProps {
   onFilesAdded: (files: File[]) => void;
   disabled?: boolean;
+  lang: Language;
 }
 
-const Dropzone: React.FC<DropzoneProps> = ({ onFilesAdded, disabled }) => {
+const Dropzone: React.FC<DropzoneProps> = ({ onFilesAdded, disabled, lang }) => {
   const [isDragging, setIsDragging] = useState(false);
+  const t = translations[lang].dropzone;
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -74,16 +77,16 @@ const Dropzone: React.FC<DropzoneProps> = ({ onFilesAdded, disabled }) => {
         
         <div>
           <h3 className="text-lg font-semibold text-slate-200">
-            {isDragging ? 'Drop videos here' : 'Drag & Drop video files'}
+            {isDragging ? t.dropHere : t.dragDrop}
           </h3>
           <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
-            Support for MP4, MOV, MKV, AVI. Maximize performance with files under 2GB.
+            {t.support}
           </p>
         </div>
 
         <div className="flex items-center gap-2 text-xs text-amber-500/80 bg-amber-950/30 px-3 py-1 rounded-full border border-amber-900/50">
             <AlertCircle className="w-3 h-3" />
-            <span>Files process locally. No data leaves your device.</span>
+            <span>{t.privacy}</span>
         </div>
       </div>
     </div>
