@@ -1,0 +1,5 @@
+{
+  "name": "NeuralCompress | Client-Side Video Optimizer",
+  "description": "A high-performance, privacy-focused video compression tool running entirely in your browser using WebAssembly. Features batch processing, smart size targeting, and granular control.",
+  "requestFramePermissions": []
+}
